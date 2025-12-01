@@ -1,5 +1,6 @@
 use rand::Rng;
 use std::process::Command;
+use std::time::{Instant, Duration};
 
 #[derive(Clone)]
 pub struct Mission01State {
@@ -12,7 +13,9 @@ pub struct Mission01State {
     
     pub gps_output: String,
     pub is_gps_compiled: bool,
-    pub is_finished: bool, // NEW: Track completion
+    pub is_finished: bool,
+    
+    pub last_runtime: Option<Duration>, // Track execution time
 }
 
 impl Mission01State {
@@ -28,11 +31,12 @@ impl Mission01State {
             gps_output: "NO_SIGNAL".to_string(),
             is_gps_compiled: false,
             is_finished: false,
+            last_runtime: None,
         }
     }
 
     pub fn move_player(&mut self, dx: i32, dy: i32) {
-        if self.is_finished { return; } // Freeze movement if done
+        if self.is_finished { return; } 
 
         let new_x = (self.player_x + dx).clamp(1, self.grid_width - 2);
         let new_y = (self.player_y + dy).clamp(1, self.grid_height - 2);
@@ -45,7 +49,7 @@ impl Mission01State {
     pub fn update_gps(&mut self) {
         if self.player_x == self.target_x && self.player_y == self.target_y {
             self.gps_output = "TARGET_ACQUIRED! SHELTER FOUND.".to_string();
-            self.is_finished = true; // Trigger completion
+            self.is_finished = true; 
             return;
         }
 
@@ -56,13 +60,17 @@ impl Mission01State {
         }
     }
 
-    fn run_gps_binary(&self, x1: i32, y1: i32, x2: i32, y2: i32) -> String {
+    fn run_gps_binary(&mut self, x1: i32, y1: i32, x2: i32, y2: i32) -> String {
+        let start_time = Instant::now(); // Start timer
+
         let output = Command::new("./user_gps_bin")
             .arg(x1.to_string())
             .arg(y1.to_string())
             .arg(x2.to_string())
             .arg(y2.to_string())
             .output();
+
+        self.last_runtime = Some(start_time.elapsed()); // Stop timer & store
 
         match output {
             Ok(c) => {

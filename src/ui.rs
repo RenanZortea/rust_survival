@@ -45,8 +45,14 @@ fn render_gameplay(f: &mut Frame, app: &App) {
     let chunks = Layout::default().direction(Direction::Vertical)
         .constraints([Constraint::Length(3), Constraint::Min(0), Constraint::Length(3)]).split(f.area());
 
+    // Display binary size in the title
+    let size_info = match app.active_mission.binary_size {
+        Some(bytes) => format!(" [BIN: {} bytes]", bytes),
+        None => "".to_string(),
+    };
+
     let tabs = Tabs::new(vec![" [1] MISSION ", " [2] LOGS "])
-        .block(Block::default().borders(Borders::ALL).title(format!(" MISSION: {} ", app.active_mission.title)))
+        .block(Block::default().borders(Borders::ALL).title(format!(" MISSION: {}{} ", app.active_mission.title, size_info)))
         .select(app.current_tab)
         .highlight_style(Style::default().fg(RUST_ORANGE).add_modifier(Modifier::BOLD));
     f.render_widget(tabs, chunks[0]);
@@ -87,9 +93,18 @@ fn render_gameplay(f: &mut Frame, app: &App) {
 fn render_mission_01(f: &mut Frame, state: &Mission01State, area: Rect) {
     let chunks = Layout::default().direction(Direction::Vertical).constraints([Constraint::Length(3), Constraint::Min(0)]).split(area);
     
-    let hud_text = format!(" STATUS: {} | DISTANCE: {}", 
+    // Format Runtime
+    let runtime_str = match state.last_runtime {
+        Some(d) => format!("{:.2?}", d),
+        None => "--".to_string(),
+    };
+
+    let hud_text = format!(" STATUS: {} | DISTANCE: {} | TIME: {}", 
         if state.is_gps_compiled { "ONLINE" } else { "OFFLINE" }, 
-        state.gps_output);
+        state.gps_output,
+        runtime_str
+    );
+
     f.render_widget(Paragraph::new(hud_text).block(Block::default().borders(Borders::ALL)), chunks[0]);
 
     let mut lines = Vec::new();

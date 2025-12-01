@@ -1,4 +1,5 @@
 use std::process::Command;
+use std::fs;
 use crate::levels::mission_01::Mission01State;
 use crate::levels::mission_02::Mission02State;
 
@@ -14,7 +15,7 @@ pub enum MissionStatus {
 pub enum GameState {
     MainMenu,
     Mission01(Mission01State),
-    Mission02(Mission02State), // NEW STATE
+    Mission02(Mission02State),
 }
 
 #[derive(Clone)]
@@ -24,6 +25,7 @@ pub struct Mission {
     pub description: String,
     pub script_path: String,
     pub status: MissionStatus,
+    pub binary_size: Option<u64>, // Stores size in bytes
 }
 
 impl Mission {
@@ -34,6 +36,7 @@ impl Mission {
             description: description.to_string(),
             script_path: path.to_string(),
             status: MissionStatus::Active,
+            binary_size: None,
         }
     }
 
@@ -47,16 +50,26 @@ impl Mission {
         match output {
             Ok(c) => {
                 if c.status.success() {
-                    self.status = MissionStatus::Success; 
+                    self.status = MissionStatus::Success;
+                    
+                    // Capture binary size
+                    if let Ok(metadata) = fs::metadata(output_name) {
+                        self.binary_size = Some(metadata.len());
+                    } else {
+                        self.binary_size = None;
+                    }
+                    
                     true
                 } else {
                     let stderr = String::from_utf8_lossy(&c.stderr);
                     self.status = MissionStatus::Failed(format!("COMPILATION FAILED:\n\n{}", stderr));
+                    self.binary_size = None;
                     false
                 }
             }
             Err(e) => {
                 self.status = MissionStatus::Failed(format!("SYSTEM ERROR: {}", e));
+                self.binary_size = None;
                 false
             }
         }
