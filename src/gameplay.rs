@@ -1,5 +1,7 @@
 use std::process::Command;
+use crate::levels::mission_01::Mission01State;
 
+#[derive(Clone)]
 pub enum MissionStatus {
     Locked,
     Active,
@@ -7,11 +9,18 @@ pub enum MissionStatus {
     Failed(String),
 }
 
+#[derive(Clone)]
+pub enum GameState {
+    MainMenu,
+    Mission01(Mission01State),
+}
+
+#[derive(Clone)]
 pub struct Mission {
     pub id: u32,
     pub title: String,
     pub description: String,
-    pub path: String,
+    pub script_path: String,
     pub status: MissionStatus,
 }
 
@@ -21,55 +30,36 @@ impl Mission {
             id,
             title: title.to_string(),
             description: description.to_string(),
-            path: path.to_string(),
+            script_path: path.to_string(),
             status: MissionStatus::Active,
         }
     }
 
-    /// Compiles the user's file into a temporary binary `user_gps_bin`
-    pub fn compile_binary(&mut self) -> bool {
+    pub fn compile_binary(&mut self, output_name: &str) -> bool {
         let output = Command::new("rustc")
-            .arg(&self.path)
+            .arg(&self.script_path)
+            .arg("--color") // Make output readable for TUI
+            .arg("never")
             .arg("-o")
-            .arg("user_gps_bin") // The binary name
+            .arg(output_name)
             .output();
 
         match output {
             Ok(c) => {
                 if c.status.success() {
-                    self.status = MissionStatus::Active;
+                    self.status = MissionStatus::Success; 
                     true
                 } else {
                     let stderr = String::from_utf8_lossy(&c.stderr);
-                    self.status = MissionStatus::Failed(format!("COMPILE ERROR:\n{}", stderr));
+                    // Rust compiler errors usually go to stderr
+                    self.status = MissionStatus::Failed(format!("COMPILATION FAILED:\n\n{}", stderr));
                     false
                 }
             }
-            Err(_) => {
-                self.status = MissionStatus::Failed("Rust compiler not found!".to_string());
+            Err(e) => {
+                self.status = MissionStatus::Failed(format!("SYSTEM ERROR: Could not run rustc.\nDetails: {}", e));
                 false
             }
-        }
-    }
-
-    /// Runs the compiled binary with coordinates as CLI args
-    pub fn run_binary(&self, x1: f64, y1: f64, x2: f64, y2: f64) -> String {
-        let output = Command::new("./user_gps_bin")
-            .arg(x1.to_string())
-            .arg(y1.to_string())
-            .arg(x2.to_string())
-            .arg(y2.to_string())
-            .output();
-
-        match output {
-            Ok(c) => {
-                if c.status.success() {
-                    String::from_utf8_lossy(&c.stdout).to_string()
-                } else {
-                    "CRASH".to_string()
-                }
-            }
-            Err(_) => "EXEC_ERR".to_string(),
         }
     }
 }

@@ -1,6 +1,6 @@
-use crate::gameplay::Mission;
-use rand::Rng;
-use ratatui::widgets::ScrollbarState; // Import this!
+use crate::gameplay::{Mission, GameState, MissionStatus};
+use crate::levels::mission_01::Mission01State;
+use ratatui::widgets::ScrollbarState;
 
 pub enum CurrentScreen {
     MainMenu,
@@ -18,7 +18,7 @@ impl MenuItem {
     pub fn all() -> Vec<MenuItem> { vec![MenuItem::Start, MenuItem::Quit] }
     pub fn label(&self) -> &str {
         match self {
-            MenuItem::Start => "BOOT_SEQUENCE (Find Shelter)",
+            MenuItem::Start => "BOOT_SEQUENCE",
             MenuItem::Quit => "POWER_DOWN",
         }
     }
@@ -27,48 +27,32 @@ impl MenuItem {
 pub struct App {
     pub current_screen: CurrentScreen,
     pub selected_item_index: usize,
-    pub active_mission: Mission,
     
-    // --- GAMEPLAY STATE ---
-    pub player_x: i32,
-    pub player_y: i32,
-    pub target_x: i32,
-    pub target_y: i32,
-    pub grid_width: i32,
-    pub grid_height: i32,
-    pub gps_output: String, 
-    pub is_gps_compiled: bool,
+    // --- MISSION DATA ---
+    pub active_mission: Mission,
+    pub state: GameState, 
 
     // --- UI STATE ---
-    pub current_tab: usize, // 0 = Nav, 1 = Logs
+    pub current_tab: usize, 
     pub vertical_scroll: u16,
     pub scroll_state: ScrollbarState,
-    pub log_line_count: u16, // To calculate scroll limits
+    pub log_line_count: u16, 
 }
 
 impl App {
     pub fn new() -> App {
-        let mut rng = rand::thread_rng();
-        
         App {
             current_screen: CurrentScreen::MainMenu,
             selected_item_index: 0,
+            
             active_mission: Mission::new(
                 1,
                 "FOG NAVIGATOR",
                 "Fix the GPS firmware. Use the distance readout to find the hidden bunker.",
                 "missions/01_shelter.rs",
             ),
-            player_x: 2,
-            player_y: 2,
-            target_x: rng.gen_range(10..28), 
-            target_y: rng.gen_range(5..15),
-            grid_width: 30,
-            grid_height: 18,
-            gps_output: "NO_SIGNAL".to_string(),
-            is_gps_compiled: false,
-            
-            // UI Init
+            state: GameState::MainMenu,
+
             current_tab: 0,
             vertical_scroll: 0,
             scroll_state: ScrollbarState::default(),
@@ -76,11 +60,25 @@ impl App {
         }
     }
 
-    // ... (Keep menu_next/previous exactly as before) ...
+    /// SINGLE SOURCE OF TRUTH for Log Text
+    pub fn get_log_content(&self) -> String {
+        match &self.active_mission.status {
+            MissionStatus::Failed(err) => err.clone(),
+            MissionStatus::Success => "COMPILATION SUCCESSFUL.\n\nFIRMWARE UPLOADED.\nSYSTEM READY.".to_string(),
+            _ => "NO LOGS AVAILABLE.\nPRESS 'C' TO COMPILE.".to_string(),
+        }
+    }
+
+    pub fn start_game(&mut self) {
+        self.current_screen = CurrentScreen::Gameplay;
+        self.state = GameState::Mission01(Mission01State::new());
+    }
+
     pub fn menu_next(&mut self) {
         let max = MenuItem::all().len() - 1;
         if self.selected_item_index < max { self.selected_item_index += 1; } else { self.selected_item_index = 0; }
     }
+    
     pub fn menu_previous(&mut self) {
         if self.selected_item_index > 0 { self.selected_item_index -= 1; } else { self.selected_item_index = MenuItem::all().len() - 1; }
     }
@@ -93,7 +91,6 @@ impl App {
         if up {
             self.vertical_scroll = self.vertical_scroll.saturating_sub(1);
         } else {
-            // Simple clamp based on line count
             if self.vertical_scroll < self.log_line_count.saturating_sub(1) {
                 self.vertical_scroll += 1;
             }
@@ -102,44 +99,69 @@ impl App {
     }
 
     pub fn compile_mission_code(&mut self) {
-        self.gps_output = "COMPILING...".to_string(); // Immediate feedback
-        let success = self.active_mission.compile_binary();
-        self.is_gps_compiled = success;
+        let success = self.active_mission.compile_binary("user_gps_bin");
         
         if success {
-            self.gps_output = "FIRMWARE_UPDATED.".to_string();
-            // Switch to Map automatically on success
+            match &mut self.state {
+                GameState::Mission01(s) => {
+                    s.is_gps_compiled = true;
+                    s.update_gps(); 
+                },
+                _ => {}
+            }
             self.current_tab = 0; 
         } else {
-            self.gps_output = "COMPILATION_ERROR".to_string();
-            // Switch to Logs automatically on failure so they see the error
+            // IF FAIL: Disable GPS, Switch to Logs, Reset Scroll
+            match &mut self.state {
+                GameState::Mission01(s) => s.is_gps_compiled = false,
+                _ => {}
+            }
             self.current_tab = 1; 
             self.vertical_scroll = 0;
         }
     }
 
-    pub fn move_player(&mut self, dx: i32, dy: i32) {
-        // Only allow movement if in Navigation tab
-        if self.current_tab != 0 { return; }
+    pub fn handle_gameplay_input(&mut self, key_code: crossterm::event::KeyCode) {
+        use crossterm::event::KeyCode;
 
-        let new_x = (self.player_x + dx).clamp(1, self.grid_width - 2);
-        let new_y = (self.player_y + dy).clamp(1, self.grid_height - 2);
-        self.player_x = new_x;
-        self.player_y = new_y;
+        match key_code {
+            KeyCode::Char('c') | KeyCode::Char('C') => {
+                self.compile_mission_code();
+                return;
+            }
+            KeyCode::Tab => {
+                self.toggle_tab();
+                return;
+            }
+            KeyCode::Esc => {
+                self.current_screen = CurrentScreen::MainMenu;
+                return;
+            }
+            _ => {}
+        }
 
-        if self.player_x == self.target_x && self.player_y == self.target_y {
-            self.gps_output = "TARGET_ACQUIRED! SHELTER FOUND.".to_string();
+        if self.current_tab == 1 {
+            match key_code {
+                KeyCode::Up => self.scroll_text(true),
+                KeyCode::Down => self.scroll_text(false),
+                KeyCode::PageUp => for _ in 0..5 { self.scroll_text(true) },
+                KeyCode::PageDown => for _ in 0..5 { self.scroll_text(false) },
+                _ => {}
+            }
             return;
         }
 
-        if self.is_gps_compiled {
-            let output = self.active_mission.run_binary(
-                self.player_x as f64, self.player_y as f64, 
-                self.target_x as f64, self.target_y as f64
-            );
-            self.gps_output = format!("DIST: {}m", output.trim());
-        } else {
-            self.gps_output = "ERR: FIRMWARE MISSING".to_string();
+        match &mut self.state {
+            GameState::Mission01(mission_state) => {
+                match key_code {
+                    KeyCode::Up => mission_state.move_player(0, -1),
+                    KeyCode::Down => mission_state.move_player(0, 1),
+                    KeyCode::Left => mission_state.move_player(-1, 0),
+                    KeyCode::Right => mission_state.move_player(1, 0),
+                    _ => {}
+                }
+            }
+            _ => {}
         }
     }
 }

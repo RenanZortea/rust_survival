@@ -2,6 +2,7 @@ mod app;
 mod gameplay;
 mod tui;
 mod ui;
+mod levels;
 
 use anyhow::Result;
 use app::{App, CurrentScreen};
@@ -12,12 +13,8 @@ fn main() -> Result<()> {
     let mut app = App::new();
 
     loop {
-        // HACK: Update content length for scrollbar before drawing
-        let log_text = if let gameplay::MissionStatus::Failed(e) = &app.active_mission.status {
-            e
-        } else {
-            ""
-        };
+        // HACK: Calculate line count for scrollbar using the exact same text generator as UI
+        let log_text = app.get_log_content();
         app.log_line_count = log_text.lines().count() as u16;
         app.scroll_state = app.scroll_state.content_length(app.log_line_count as usize);
 
@@ -31,7 +28,7 @@ fn main() -> Result<()> {
                         KeyCode::Down => app.menu_next(),
                         KeyCode::Enter => {
                             if app.selected_item_index == 0 {
-                                app.current_screen = CurrentScreen::Gameplay;
+                                app.start_game();
                             } else {
                                 app.current_screen = CurrentScreen::Exiting;
                             }
@@ -39,42 +36,8 @@ fn main() -> Result<()> {
                         KeyCode::Esc => app.current_screen = CurrentScreen::Exiting,
                         _ => {}
                     },
-                    CurrentScreen::Gameplay => match key.code {
-                        // Global Gameplay Keys
-                        KeyCode::Char('c') | KeyCode::Char('C') => app.compile_mission_code(),
-                        KeyCode::Tab => app.toggle_tab(),
-                        KeyCode::Esc => app.current_screen = CurrentScreen::MainMenu,
-
-                        // Context Specific Keys
-                        _ => {
-                            if app.current_tab == 0 {
-                                // NAVIGATION MODE
-                                match key.code {
-                                    KeyCode::Up => app.move_player(0, -1),
-                                    KeyCode::Down => app.move_player(0, 1),
-                                    KeyCode::Left => app.move_player(-1, 0),
-                                    KeyCode::Right => app.move_player(1, 0),
-                                    _ => {}
-                                }
-                            } else {
-                                // DEBUG MODE (SCROLLING)
-                                match key.code {
-                                    KeyCode::Up => app.scroll_text(true),
-                                    KeyCode::Down => app.scroll_text(false),
-                                    KeyCode::PageUp => {
-                                        for _ in 0..5 {
-                                            app.scroll_text(true);
-                                        }
-                                    }
-                                    KeyCode::PageDown => {
-                                        for _ in 0..5 {
-                                            app.scroll_text(false);
-                                        }
-                                    }
-                                    _ => {}
-                                }
-                            }
-                        }
+                    CurrentScreen::Gameplay => {
+                        app.handle_gameplay_input(key.code);
                     },
                     CurrentScreen::Exiting => break,
                 }
