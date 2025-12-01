@@ -12,6 +12,7 @@ pub struct Mission01State {
     
     pub gps_output: String,
     pub is_gps_compiled: bool,
+    pub is_finished: bool, // NEW: Track completion
 }
 
 impl Mission01State {
@@ -26,10 +27,13 @@ impl Mission01State {
             grid_height: 18,
             gps_output: "NO_SIGNAL".to_string(),
             is_gps_compiled: false,
+            is_finished: false,
         }
     }
 
     pub fn move_player(&mut self, dx: i32, dy: i32) {
+        if self.is_finished { return; } // Freeze movement if done
+
         let new_x = (self.player_x + dx).clamp(1, self.grid_width - 2);
         let new_y = (self.player_y + dy).clamp(1, self.grid_height - 2);
         self.player_x = new_x;
@@ -41,6 +45,7 @@ impl Mission01State {
     pub fn update_gps(&mut self) {
         if self.player_x == self.target_x && self.player_y == self.target_y {
             self.gps_output = "TARGET_ACQUIRED! SHELTER FOUND.".to_string();
+            self.is_finished = true; // Trigger completion
             return;
         }
 
@@ -73,7 +78,6 @@ impl Mission01State {
     }
 
     pub fn verify_integrity() -> Result<(), String> {
-        // Run against the 3-4-5 Triangle test case
         let output = Command::new("./user_gps_bin")
             .arg("0").arg("0").arg("3").arg("4")
             .output();
@@ -84,23 +88,14 @@ impl Mission01State {
                 let stderr = String::from_utf8_lossy(&c.stderr);
 
                 if !c.status.success() {
-                    // Capture Runtime Errors (Panics)
-                    return Err(format!(
-                        "RUNTIME ERROR (TEST CRASHED):\n\n--- STDERR (PANIC LOG) ---\n{}\n\n--- STDOUT ---\n{}", 
-                        stderr, stdout
-                    ));
+                    return Err(format!("RUNTIME ERROR:\n{}\n{}", stderr, stdout));
                 }
                 
                 let val = stdout.trim();
-                
                 if val == "5.00" {
                     Ok(())
                 } else {
-                    // Capture Logic Errors
-                    Err(format!(
-                        "LOGIC VERIFICATION FAILED.\n\nTEST CASE:\nStart: (0,0)\nTarget: (3,4)\nExpected Distance: 5.00\nActual Output: '{}'\n\nHint: Check your distance formula.",
-                        val
-                    ))
+                    Err(format!("LOGIC ERROR: Expected 5.00, got '{}'", val))
                 }
             }
             Err(e) => Err(format!("System Error: {}", e)),

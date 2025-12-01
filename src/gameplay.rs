@@ -1,5 +1,6 @@
 use std::process::Command;
 use crate::levels::mission_01::Mission01State;
+use crate::levels::mission_02::Mission02State;
 
 #[derive(Clone)]
 pub enum MissionStatus {
@@ -13,6 +14,7 @@ pub enum MissionStatus {
 pub enum GameState {
     MainMenu,
     Mission01(Mission01State),
+    Mission02(Mission02State), // NEW STATE
 }
 
 #[derive(Clone)]
@@ -38,10 +40,8 @@ impl Mission {
     pub fn compile_binary(&mut self, output_name: &str) -> bool {
         let output = Command::new("rustc")
             .arg(&self.script_path)
-            .arg("--color") // Make output readable for TUI
-            .arg("never")
-            .arg("-o")
-            .arg(output_name)
+            .arg("--color").arg("never")
+            .arg("-o").arg(output_name)
             .output();
 
         match output {
@@ -51,13 +51,12 @@ impl Mission {
                     true
                 } else {
                     let stderr = String::from_utf8_lossy(&c.stderr);
-                    // Rust compiler errors usually go to stderr
                     self.status = MissionStatus::Failed(format!("COMPILATION FAILED:\n\n{}", stderr));
                     false
                 }
             }
             Err(e) => {
-                self.status = MissionStatus::Failed(format!("SYSTEM ERROR: Could not run rustc.\nDetails: {}", e));
+                self.status = MissionStatus::Failed(format!("SYSTEM ERROR: {}", e));
                 false
             }
         }
