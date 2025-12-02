@@ -66,7 +66,7 @@ Now, those interpreted languages are dead.
 
 ---
 
-🛠️ Installation & Mission Initialization
+# 🛠️ Installation & Mission Initialization
 
 This isn't just a game. It's an exam. You need the Rust Toolchain to survive.
 
@@ -74,12 +74,10 @@ This isn't just a game. It's an exam. You need the Rust Toolchain to survive.
 
 Compile from Source (Recommended for Scavengers)
 
-```
-
+```bash
 git clone [https://github.com/renanzortea/rust_survival.git](https://github.com/renanzortea/rust_survival.git)
 cd rust_survival
 cargo build --release
-
 ```
 
 2. Initialize the Workspace
@@ -90,13 +88,13 @@ Run the initialization sequence:
 
 # If running from source:
 
-```
+```bash
 cargo run -- --init
 ```
 
 # If installed globally:
 
-```
+```bash
 rust_survival --init
 ```
 
