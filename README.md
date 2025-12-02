@@ -75,7 +75,7 @@ This isn't just a game. It's an exam. You need the Rust Toolchain to survive.
 Compile from Source (Recommended for Scavengers)
 
 ```bash
-git clone [https://github.com/renanzortea/rust_survival.git](https://github.com/renanzortea/rust_survival.git)
+git clone https://github.com/renanzortea/rust_survival.git
 cd rust_survival
 cargo build --release
 ```
