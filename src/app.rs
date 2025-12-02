@@ -6,22 +6,28 @@ use crossterm::event::KeyCode;
 
 pub enum CurrentScreen {
     MainMenu,
+    LevelSelection, // NEW: Level select screen
     Gameplay,
     Exiting,
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq)]
 pub enum MenuItem {
     Start,
+    SelectLevel, // NEW: Menu option
     Quit,
 }
 
 impl MenuItem {
-    pub fn all() -> Vec<MenuItem> { vec![MenuItem::Start, MenuItem::Quit] }
+    pub fn all() -> Vec<MenuItem> { 
+        vec![MenuItem::Start, MenuItem::SelectLevel, MenuItem::Quit] 
+    }
+    
     pub fn label(&self) -> &str {
         match self {
-            MenuItem::Start => "BOOT_SEQUENCE",
-            MenuItem::Quit => "POWER_DOWN",
+            MenuItem::Start => " > INITIATE_SURVIVAL",
+            MenuItem::SelectLevel => " > MISSION_SELECT",
+            MenuItem::Quit => " > POWER_DOWN",
         }
     }
 }
@@ -29,6 +35,9 @@ impl MenuItem {
 pub struct App {
     pub current_screen: CurrentScreen,
     pub selected_item_index: usize,
+    
+    // NEW: For level selection
+    pub mission_selection_index: usize,
     
     pub active_mission: Mission,
     pub state: GameState, 
@@ -44,6 +53,7 @@ impl App {
         App {
             current_screen: CurrentScreen::MainMenu,
             selected_item_index: 0,
+            mission_selection_index: 0, // Default to first mission
             active_mission: Mission::new(1, "FOG NAVIGATOR", "Fix the GPS.", "missions/01_shelter.rs"),
             state: GameState::MainMenu,
             current_tab: 0,
@@ -61,32 +71,67 @@ impl App {
         }
     }
 
+    // Helper to get mission list info for the UI
+    pub fn get_mission_list() -> Vec<(u32, &'static str, &'static str)> {
+        vec![
+            (1, "FOG NAVIGATOR", "Repair GPS to find shelter."),
+            (2, "RADIO SILENCE", "Tune frequency to establish contact."),
+        ]
+    }
+
     pub fn start_game(&mut self) {
+        // Default start (Mission 1)
+        self.load_mission_01();
+    }
+
+    pub fn load_mission_01(&mut self) {
         self.current_screen = CurrentScreen::Gameplay;
         self.state = GameState::Mission01(Mission01State::new());
         self.active_mission = Mission::new(1, "FOG NAVIGATOR", "Fix GPS.", "missions/01_shelter.rs");
+        self.current_tab = 0;
     }
 
-    // NEW: Transition Logic
     pub fn load_mission_02(&mut self) {
+        self.current_screen = CurrentScreen::Gameplay;
+        self.state = GameState::Mission02(Mission02State::new());
         self.active_mission = Mission::new(
             2, 
             "RADIO SILENCE", 
             "The bunker radio is dead. Fix the frequency scanner to call for help.", 
             "missions/02_radio.rs"
         );
-        self.state = GameState::Mission02(Mission02State::new());
         self.current_tab = 0;
-        self.active_mission.status = MissionStatus::Active; // Reset log status
     }
+
+    pub fn start_selected_level(&mut self) {
+        match self.mission_selection_index {
+            0 => self.load_mission_01(),
+            1 => self.load_mission_02(),
+            _ => {}
+        }
+    }
+
+    // --- NAVIGATION LOGIC ---
 
     pub fn menu_next(&mut self) {
         let max = MenuItem::all().len() - 1;
         if self.selected_item_index < max { self.selected_item_index += 1; } else { self.selected_item_index = 0; }
     }
+    
     pub fn menu_previous(&mut self) {
         if self.selected_item_index > 0 { self.selected_item_index -= 1; } else { self.selected_item_index = MenuItem::all().len() - 1; }
     }
+
+    pub fn level_select_next(&mut self) {
+        let max = Self::get_mission_list().len() - 1;
+        if self.mission_selection_index < max { self.mission_selection_index += 1; } else { self.mission_selection_index = 0; }
+    }
+
+    pub fn level_select_previous(&mut self) {
+        let max = Self::get_mission_list().len() - 1;
+        if self.mission_selection_index > 0 { self.mission_selection_index -= 1; } else { self.mission_selection_index = max; }
+    }
+
     pub fn toggle_tab(&mut self) { self.current_tab = if self.current_tab == 0 { 1 } else { 0 }; }
 
     pub fn scroll_text(&mut self, up: bool) {
@@ -110,7 +155,6 @@ impl App {
                 s.update_gps();
             },
             GameState::Mission02(s) => {
-                // Mission 2 compilation logic
                 s.is_compiled = true;
                 s.check_signal();
             }
@@ -131,26 +175,51 @@ impl App {
         self.vertical_scroll = 0;
     }
 
-    pub fn handle_gameplay_input(&mut self, key_code: KeyCode) {
-        // 1. Check for Level Transition (Press Enter when Finished)
-        match &self.state {
-            GameState::Mission01(s) if s.is_finished => {
-                if key_code == KeyCode::Enter {
-                    self.load_mission_02();
-                    return;
+    // Consolidated Input Handler
+    pub fn handle_input(&mut self, key_code: KeyCode) {
+        match self.current_screen {
+            CurrentScreen::MainMenu => {
+                match key_code {
+                    KeyCode::Up => self.menu_previous(),
+                    KeyCode::Down => self.menu_next(),
+                    KeyCode::Enter => {
+                        match MenuItem::all()[self.selected_item_index] {
+                            MenuItem::Start => self.start_game(),
+                            MenuItem::SelectLevel => self.current_screen = CurrentScreen::LevelSelection,
+                            MenuItem::Quit => self.current_screen = CurrentScreen::Exiting,
+                        }
+                    }
+                    _ => {}
                 }
             },
-            GameState::Mission02(s) if s.is_finished => {
-                if key_code == KeyCode::Enter {
-                    // Mission 3 would go here, or Exit
-                    self.current_screen = CurrentScreen::Exiting;
-                    return;
+            CurrentScreen::LevelSelection => {
+                match key_code {
+                    KeyCode::Up => self.level_select_previous(),
+                    KeyCode::Down => self.level_select_next(),
+                    KeyCode::Enter => self.start_selected_level(),
+                    KeyCode::Esc => self.current_screen = CurrentScreen::MainMenu,
+                    _ => {}
                 }
-            }
+            },
+            CurrentScreen::Gameplay => self.handle_gameplay_input(key_code),
             _ => {}
         }
+    }
 
-        // 2. Standard Input
+    fn handle_gameplay_input(&mut self, key_code: KeyCode) {
+        // Check level transitions first
+        match &self.state {
+             GameState::Mission01(s) if s.is_finished && key_code == KeyCode::Enter => {
+                 self.load_mission_02();
+                 return;
+             },
+             GameState::Mission02(s) if s.is_finished && key_code == KeyCode::Enter => {
+                 self.current_screen = CurrentScreen::Exiting;
+                 return;
+             },
+             _ => {}
+        }
+
         match key_code {
             KeyCode::Char('c') | KeyCode::Char('C') => { self.compile_mission_code(); return; }
             KeyCode::Tab => { self.toggle_tab(); return; }
@@ -169,21 +238,15 @@ impl App {
             return;
         }
 
-        // 3. Level Specific Input
-        match &mut self.state {
-            GameState::Mission01(s) => {
-                match key_code {
-                    KeyCode::Up => s.move_player(0, -1),
-                    KeyCode::Down => s.move_player(0, 1),
-                    KeyCode::Left => s.move_player(-1, 0),
-                    KeyCode::Right => s.move_player(1, 0),
-                    _ => {}
-                }
+        // Mission specific controls
+        if let GameState::Mission01(s) = &mut self.state {
+            match key_code {
+                KeyCode::Up => s.move_player(0, -1),
+                KeyCode::Down => s.move_player(0, 1),
+                KeyCode::Left => s.move_player(-1, 0),
+                KeyCode::Right => s.move_player(1, 0),
+                _ => {}
             }
-            GameState::Mission02(_) => {
-                // Mission 2 has no movement controls, just 'C' to compile
-            }
-            _ => {}
         }
     }
 }

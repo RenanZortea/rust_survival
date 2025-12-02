@@ -1,7 +1,7 @@
-use std::process::Command;
-use std::fs;
 use crate::levels::mission_01::Mission01State;
 use crate::levels::mission_02::Mission02State;
+use std::fs;
+use std::process::Command;
 
 #[derive(Clone)]
 pub enum MissionStatus {
@@ -20,8 +20,10 @@ pub enum GameState {
 
 #[derive(Clone)]
 pub struct Mission {
+    #[allow(dead_code)]
     pub id: u32,
     pub title: String,
+    #[allow(dead_code)]
     pub description: String,
     pub script_path: String,
     pub status: MissionStatus,
@@ -43,26 +45,29 @@ impl Mission {
     pub fn compile_binary(&mut self, output_name: &str) -> bool {
         let output = Command::new("rustc")
             .arg(&self.script_path)
-            .arg("--color").arg("never")
-            .arg("-o").arg(output_name)
+            .arg("--color")
+            .arg("never")
+            .arg("-o")
+            .arg(output_name)
             .output();
 
         match output {
             Ok(c) => {
                 if c.status.success() {
                     self.status = MissionStatus::Success;
-                    
+
                     // Capture binary size
                     if let Ok(metadata) = fs::metadata(output_name) {
                         self.binary_size = Some(metadata.len());
                     } else {
                         self.binary_size = None;
                     }
-                    
+
                     true
                 } else {
                     let stderr = String::from_utf8_lossy(&c.stderr);
-                    self.status = MissionStatus::Failed(format!("COMPILATION FAILED:\n\n{}", stderr));
+                    self.status =
+                        MissionStatus::Failed(format!("COMPILATION FAILED:\n\n{}", stderr));
                     self.binary_size = None;
                     false
                 }
