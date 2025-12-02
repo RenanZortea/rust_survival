@@ -38,8 +38,8 @@ fn main() {
 fn calculate_distance(x1: f64, y1: f64, x2: f64, y2: f64) -> f64 {
     // TODO: Fix the math.
     // Hint: Use (x2 - x1).powi(2) or (x2-x1) * (x2-x1)
-    let mut dx = (x2 - x1).powi(2);
-    let mut dy = (y2 - y1).powi(2);
-    let mut distance = (dx + dy).sqrt();
-    distance
+    // let mut dx = (x2 - x1).powi(2);
+    // let mut dy = (y2 - y1).powi(2);
+    // let mut distance = (dx + dy).sqrt();
+    // distance
 }

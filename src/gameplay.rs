@@ -1,82 +1,97 @@
 use crate::levels::mission_01::Mission01State;
 use crate::levels::mission_02::Mission02State;
 use std::fs;
+use std::path::Path;
 use std::process::Command;
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq)]
 pub enum MissionStatus {
     Locked,
     Active,
     Success,
-    Failed(String),
+    Failed(String), // Contains the compiler error message
 }
 
-#[derive(Clone)]
-pub enum GameState {
-    MainMenu,
-    Mission01(Mission01State),
-    Mission02(Mission02State),
-}
-
-#[derive(Clone)]
 pub struct Mission {
-    #[allow(dead_code)]
     pub id: u32,
-    pub title: String,
-    #[allow(dead_code)]
-    pub description: String,
-    pub script_path: String,
+    pub title: &'static str,
+    pub description: &'static str,
+    pub path: &'static str,
     pub status: MissionStatus,
-    pub binary_size: Option<u64>, // Stores size in bytes
+    // Added to satisfy UI requirements (Option<u64> allows None if no binary exists)
+    pub binary_size: Option<u64>,
 }
 
 impl Mission {
-    pub fn new(id: u32, title: &str, description: &str, path: &str) -> Self {
-        Mission {
+    pub fn new(
+        id: u32,
+        title: &'static str,
+        description: &'static str,
+        path: &'static str,
+    ) -> Self {
+        Self {
             id,
-            title: title.to_string(),
-            description: description.to_string(),
-            script_path: path.to_string(),
+            title,
+            description,
+            path,
             status: MissionStatus::Active,
             binary_size: None,
         }
     }
 
+    /// Attempts to compile the mission source code located at `self.path`.
     pub fn compile_binary(&mut self, output_name: &str) -> bool {
+        let source_path = Path::new(self.path);
+
+        // 1. Check if file exists locally
+        if !source_path.exists() {
+            self.status = MissionStatus::Failed(format!(
+                "ERROR: File not found: {}\n\nDid you delete it? Run --init to restore.",
+                self.path
+            ));
+            self.binary_size = None;
+            return false;
+        }
+
+        // 2. Invoke rustc
         let output = Command::new("rustc")
-            .arg(&self.script_path)
-            .arg("--color")
-            .arg("never")
+            .arg(source_path)
             .arg("-o")
             .arg(output_name)
             .output();
 
         match output {
-            Ok(c) => {
-                if c.status.success() {
+            Ok(o) => {
+                if o.status.success() {
                     self.status = MissionStatus::Success;
 
-                    // Capture binary size
+                    // Update binary size for the UI
                     if let Ok(metadata) = fs::metadata(output_name) {
                         self.binary_size = Some(metadata.len());
-                    } else {
-                        self.binary_size = None;
                     }
 
-                    true
+                    return true;
                 } else {
-                    let stderr = String::from_utf8_lossy(&c.stderr);
-                    self.status =
-                        MissionStatus::Failed(format!("COMPILATION FAILED:\n\n{}", stderr));
+                    let stderr = String::from_utf8_lossy(&o.stderr);
+                    self.status = MissionStatus::Failed(stderr.to_string());
                     self.binary_size = None;
-                    false
+                    return false;
                 }
             }
             Err(e) => {
-                self.status = MissionStatus::Failed(format!("SYSTEM ERROR: {}", e));
+                self.status = MissionStatus::Failed(format!(
+                    "CRITICAL ERROR: Could not run 'rustc'.\nIs Rust installed?\nDetails: {}",
+                    e
+                ));
                 self.binary_size = None;
-                false
+                return false;
             }
         }
     }
+}
+
+pub enum GameState {
+    MainMenu,
+    Mission01(Mission01State),
+    Mission02(Mission02State),
 }

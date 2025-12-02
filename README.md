@@ -63,3 +63,58 @@ Now, those interpreted languages are dead.
 - **Java?** You can't run the JVM on a potato. The Garbage Collector pauses take longer than your oxygen tank lasts.
 - **Python?** Too slow. By the time the interpreter starts, the mutant wolves have already eaten you.
 - **JavaScript?** `[object Object]`.
+
+---
+
+🛠️ Installation & Mission Initialization
+
+This isn't just a game. It's an exam. You need the Rust Toolchain to survive.
+
+1. Acquire the Binary
+
+Compile from Source (Recommended for Scavengers)
+
+```
+
+git clone [https://github.com/renanzortea/rust_survival.git](https://github.com/renanzortea/rust_survival.git)
+cd rust_survival
+cargo build --release
+
+```
+
+2. Initialize the Workspace
+
+Before you can fix the hardware, you need to extract the corrupted firmware to your local deck.
+
+Run the initialization sequence:
+
+# If running from source:
+
+```
+cargo run -- --init
+```
+
+# If installed globally:
+
+```
+rust_survival --init
+```
+
+This will generate a missions/ directory in your current location.
+⚠️ DO NOT DELETE THIS FOLDER. It contains the source code you must repair.
+
+3. The Survival Loop
+
+Launch the Interface: Run cargo run (or rust_survival).
+
+Select a Mission: Use Arrow Keys to navigate the terminal UI.
+
+Identify the Bug: The mission log will describe the hardware failure.
+
+Edit the Code: Open the corresponding file in missions/ (e.g., missions/01_shelter.rs) in your favorite text editor (VS Code, Vim, Nano).
+
+Compile & Verify: Press C inside the game to trigger a hot-compile of your local file.
+
+Success: The system comes online, and you progress.
+
+Failure: The compiler errors appear in the game log. Read them. Fix them. Survive.
